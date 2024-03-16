@@ -16,13 +16,13 @@ package epochsummary
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	standardchaintime "github.com/wealdtech/ethdo/services/chaintime/standard"
@@ -287,21 +287,14 @@ func (c *command) processSyncCommitteeDuties(ctx context.Context) error {
 			// If the block is missed we don't count the sync aggregate miss.
 			continue
 		}
-		var aggregate *altair.SyncAggregate
-		switch block.Version {
-		case spec.DataVersionPhase0:
+		if block.Version == spec.DataVersionPhase0 {
 			// No sync committees in this fork.
 			return nil
-		case spec.DataVersionAltair:
-			aggregate = block.Altair.Message.Body.SyncAggregate
-		case spec.DataVersionBellatrix:
-			aggregate = block.Bellatrix.Message.Body.SyncAggregate
-		case spec.DataVersionCapella:
-			aggregate = block.Capella.Message.Body.SyncAggregate
-		case spec.DataVersionDeneb:
-			aggregate = block.Deneb.Message.Body.SyncAggregate
-		default:
-			return fmt.Errorf("unhandled block version %v", block.Version)
+		}
+
+		aggregate, err := block.SyncAggregate()
+		if err != nil {
+			return errors.Wrapf(err, "failed to obtain sync aggregate for slot %d", slot)
 		}
 		for i := uint64(0); i < aggregate.SyncCommitteeBits.Len(); i++ {
 			if !aggregate.SyncCommitteeBits.BitAt(i) {
@@ -349,7 +342,7 @@ func (c *command) setup(ctx context.Context) error {
 
 	c.chainTime, err = standardchaintime.New(ctx,
 		standardchaintime.WithSpecProvider(c.eth2Client.(eth2client.SpecProvider)),
-		standardchaintime.WithGenesisTimeProvider(c.eth2Client.(eth2client.GenesisTimeProvider)),
+		standardchaintime.WithGenesisProvider(c.eth2Client.(eth2client.GenesisProvider)),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to set up chaintime service")
@@ -397,7 +390,7 @@ func (c *command) processBlobs(ctx context.Context) error {
 		case spec.DataVersionPhase0, spec.DataVersionAltair, spec.DataVersionBellatrix, spec.DataVersionCapella:
 			// No blobs in these forks.
 		case spec.DataVersionDeneb:
-			c.summary.Blobs += len(block.Deneb.Message.Body.BlobKzgCommitments)
+			c.summary.Blobs += len(block.Deneb.Message.Body.BlobKZGCommitments)
 		default:
 			return fmt.Errorf("unhandled block version %v", block.Version)
 		}
@@ -419,6 +412,12 @@ func (c *command) fetchBlock(ctx context.Context,
 			Block: blockID,
 		})
 		if err != nil {
+			var apiErr *api.Error
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+				// No block for this slot, that's okay.
+				return nil, nil
+			}
+
 			return nil, errors.Wrap(err, "failed to fetch block")
 		}
 		block = blockResponse.Data

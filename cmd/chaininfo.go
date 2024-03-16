@@ -35,7 +35,7 @@ var chainInfoCmd = &cobra.Command{
     ethdo chain info
 
 In quiet mode this will return 0 if the chain information can be obtained, otherwise 1.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		ctx := context.Background()
 
 		eth2Client, err := util.ConnectToBeaconNode(ctx, &util.ConnectOpts{
@@ -46,10 +46,10 @@ In quiet mode this will return 0 if the chain information can be obtained, other
 		})
 		errCheck(err, "Failed to connect to Ethereum 2 beacon node")
 
-		specResponse, err := eth2Client.(eth2client.SpecProvider).Spec(ctx)
+		specResponse, err := eth2Client.(eth2client.SpecProvider).Spec(ctx, &api.SpecOpts{})
 		errCheck(err, "Failed to obtain beacon chain specification")
 
-		genesisResponse, err := eth2Client.(eth2client.GenesisProvider).Genesis(ctx)
+		genesisResponse, err := eth2Client.(eth2client.GenesisProvider).Genesis(ctx, &api.GenesisOpts{})
 		errCheck(err, "Failed to obtain beacon chain genesis")
 
 		forkResponse, err := eth2Client.(eth2client.ForkProvider).Fork(ctx, &api.ForkOpts{State: "head"})

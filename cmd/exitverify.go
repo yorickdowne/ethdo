@@ -39,7 +39,7 @@ var exitVerifyCmd = &cobra.Command{
     ethdo exit verify --signed-operation=exitdata.json --validator=primary/current
 
 In quiet mode this will return 0 if the exit is verified correctly, otherwise 1.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		ctx := context.Background()
 
 		assert(viper.GetString("signed-operation") != "", "signed-operation is required")
@@ -68,7 +68,7 @@ In quiet mode this will return 0 if the exit is verified correctly, otherwise 1.
 		opRoot, err := signedOp.Message.HashTreeRoot()
 		errCheck(err, "Failed to obtain exit hash tree root")
 
-		genesisResponse, err := eth2Client.(consensusclient.GenesisProvider).Genesis(ctx)
+		genesisResponse, err := eth2Client.(consensusclient.GenesisProvider).Genesis(ctx, &api.GenesisOpts{})
 		errCheck(err, "Failed to obtain beacon chain genesis")
 		genesis := genesisResponse.Data
 

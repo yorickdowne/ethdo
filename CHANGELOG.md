@@ -1,5 +1,24 @@
+dev:
+  - provide better error message on context deadlline exceeded
+  - update launchpad output to match latest version
+
+1.35.2:
+  - update dependencies
+
+1.35.1:
+  - fix output for various commands that may encounter an empty slot
+
+1.35.0:
+  - support Deneb
+  - add start and end dates for eth1votes period
+
+1.34.1:
+  - fix period parsing for "synccommittee members" command
+
 1.34.0:
   - update dependencies
+  - use Capella fork for all exits
+  - support Deneb beta 5
 
 1.33.2:
   - fix windows build

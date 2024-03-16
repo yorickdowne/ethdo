@@ -43,7 +43,7 @@ var validatorInfoCmd = &cobra.Command{
     ethdo validator info --validator=primary/validator
 
 In quiet mode this will return 0 if the validator information can be obtained, otherwise 1.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		ctx := context.Background()
 
 		eth2Client, err := util.ConnectToBeaconNode(ctx, &util.ConnectOpts{
@@ -56,7 +56,7 @@ In quiet mode this will return 0 if the validator information can be obtained, o
 
 		chainTime, err := standardchaintime.New(ctx,
 			standardchaintime.WithSpecProvider(eth2Client.(eth2client.SpecProvider)),
-			standardchaintime.WithGenesisTimeProvider(eth2Client.(eth2client.GenesisTimeProvider)),
+			standardchaintime.WithGenesisProvider(eth2Client.(eth2client.GenesisProvider)),
 		)
 		if err != nil {
 			errCheck(err, "failed to set up chaintime service")

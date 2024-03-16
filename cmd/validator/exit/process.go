@@ -647,7 +647,7 @@ func (c *command) setup(ctx context.Context) error {
 
 	// Set up chaintime.
 	c.chainTime, err = standardchaintime.New(ctx,
-		standardchaintime.WithGenesisTimeProvider(c.consensusClient.(consensusclient.GenesisTimeProvider)),
+		standardchaintime.WithGenesisProvider(c.consensusClient.(consensusclient.GenesisProvider)),
 		standardchaintime.WithSpecProvider(c.consensusClient.(consensusclient.SpecProvider)),
 	)
 	if err != nil {
@@ -662,7 +662,7 @@ func (c *command) generateDomain(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	forkVersion, err := c.obtainForkVersion(ctx)
+	forkVersion, err := c.obtainExitForkVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -709,10 +709,11 @@ func (c *command) obtainGenesisValidatorsRoot(_ context.Context) (phase0.Root, e
 	if c.debug {
 		fmt.Fprintf(os.Stderr, "Using genesis validators root %#x\n", genesisValidatorsRoot)
 	}
+
 	return genesisValidatorsRoot, nil
 }
 
-func (c *command) obtainForkVersion(_ context.Context) (phase0.Version, error) {
+func (c *command) obtainExitForkVersion(_ context.Context) (phase0.Version, error) {
 	forkVersion := phase0.Version{}
 
 	if c.forkVersion != "" {
@@ -731,12 +732,13 @@ func (c *command) obtainForkVersion(_ context.Context) (phase0.Version, error) {
 		if c.debug {
 			fmt.Fprintf(os.Stderr, "Fork version obtained from chain info\n")
 		}
-		// Use the current fork version for generating an exit as per the spec.
-		copy(forkVersion[:], c.chainInfo.CurrentForkVersion[:])
+		// Use the Capella fork version for generating an exit as per the spec.
+		copy(forkVersion[:], c.chainInfo.ExitForkVersion[:])
 	}
 
 	if c.debug {
 		fmt.Fprintf(os.Stderr, "Using fork version %#x\n", forkVersion)
 	}
+
 	return forkVersion, nil
 }

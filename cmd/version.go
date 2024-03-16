@@ -1,4 +1,4 @@
-// Copyright © 2019 - 2023 Weald Technology Trading.
+// Copyright © 2019 - 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -16,7 +16,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	dbg "runtime/debug"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,7 +24,7 @@ import (
 
 // ReleaseVersion is the release version of the codebase.
 // Usually overridden by tag names when building binaries.
-var ReleaseVersion = "local build (latest release 1.34.0)"
+var ReleaseVersion = "local build (latest release 1.35.2)"
 
 // versionCmd represents the version command.
 var versionCmd = &cobra.Command{
@@ -33,10 +33,19 @@ var versionCmd = &cobra.Command{
 	Long: `Obtain the version of ethdo.  For example:
 
     ethdo version`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println(ReleaseVersion)
 		if viper.GetBool("verbose") {
-			buildInfo, ok := dbg.ReadBuildInfo()
+			if info, ok := debug.ReadBuildInfo(); ok {
+				for _, setting := range info.Settings {
+					if setting.Key == "vcs.revision" {
+						fmt.Printf("Commit hash: %s\n", setting.Value)
+						break
+					}
+				}
+			}
+
+			buildInfo, ok := debug.ReadBuildInfo()
 			if ok {
 				fmt.Printf("Package: %s\n", buildInfo.Path)
 				fmt.Println("Dependencies:")

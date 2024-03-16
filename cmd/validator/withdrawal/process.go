@@ -1,4 +1,4 @@
-// Copyright © 2023 Weald Technology Trading.
+// Copyright © 2023, 2024 Weald Technology Trading.
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -22,7 +22,6 @@ import (
 	consensusclient "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	standardchaintime "github.com/wealdtech/ethdo/services/chaintime/standard"
@@ -62,7 +61,7 @@ func (c *command) process(ctx context.Context) error {
 		return errors.Wrap(err, "failed to obtain block slot")
 	}
 	if c.debug {
-		fmt.Fprintf(os.Stderr, "Slot is %d\n", slot)
+		fmt.Fprintf(os.Stderr, "Current slot is %d\n", slot)
 	}
 
 	response, err := c.consensusClient.(consensusclient.ValidatorsProvider).Validators(ctx, &api.ValidatorsOpts{
@@ -76,28 +75,21 @@ func (c *command) process(ctx context.Context) error {
 		validators[validator.Index] = validator
 	}
 
-	var nextWithdrawalValidatorIndex phase0.ValidatorIndex
-	switch block.Version {
-	case spec.DataVersionCapella:
-		withdrawals := block.Capella.Message.Body.ExecutionPayload.Withdrawals
-		if len(withdrawals) == 0 {
-			return errors.New("block without withdrawals; cannot obtain next withdrawal validator index")
-		}
-		nextWithdrawalValidatorIndex = phase0.ValidatorIndex((int(withdrawals[len(withdrawals)-1].ValidatorIndex) + 1) % len(validators))
-	case spec.DataVersionDeneb:
-		withdrawals := block.Deneb.Message.Body.ExecutionPayload.Withdrawals
-		if len(withdrawals) == 0 {
-			return errors.New("block without withdrawals; cannot obtain next withdrawal validator index")
-		}
-		nextWithdrawalValidatorIndex = phase0.ValidatorIndex((int(withdrawals[len(withdrawals)-1].ValidatorIndex) + 1) % len(validators))
-	default:
-		return fmt.Errorf("unhandled block version %v", block.Version)
+	withdrawals, err := block.Withdrawals()
+	if err != nil {
+		return errors.Wrap(err, "failed to obtain withdrawals from block")
 	}
+	if len(withdrawals) == 0 {
+		return errors.New("block without withdrawals; cannot obtain next withdrawal validator index")
+	}
+	nextWithdrawalValidatorIndex := phase0.ValidatorIndex((int(withdrawals[len(withdrawals)-1].ValidatorIndex) + 1) % len(validators))
 
 	if c.debug {
 		fmt.Fprintf(os.Stderr, "Next withdrawal validator index is %d\n", nextWithdrawalValidatorIndex)
 	}
 
+	withdrawalSlot := slot + 1
+	withdrawalsInSlot := 0
 	index := int(nextWithdrawalValidatorIndex)
 	for {
 		if index == len(validators) {
@@ -107,10 +99,19 @@ func (c *command) process(ctx context.Context) error {
 			break
 		}
 		if validators[index].Validator.WithdrawalCredentials[0] == ethWithdrawalPrefix &&
-			validators[index].Validator.EffectiveBalance == c.maxEffectiveBalance {
+			validators[index].Validator.EffectiveBalance == c.maxEffectiveBalance &&
+			validators[index].Validator.ActivationEpoch <= c.chainTime.SlotToEpoch(withdrawalSlot) {
 			c.res.WithdrawalsToGo++
+			withdrawalsInSlot++
+			if withdrawalsInSlot == int(c.maxWithdrawalsPerPayload) {
+				withdrawalSlot++
+				withdrawalsInSlot = 0
+			}
 		}
 		index++
+	}
+	if c.debug {
+		fmt.Fprintf(os.Stderr, "There are %d withdrawals to go until this validator\n", c.res.WithdrawalsToGo)
 	}
 
 	c.res.BlocksToGo = c.res.WithdrawalsToGo / c.maxWithdrawalsPerPayload
@@ -139,14 +140,14 @@ func (c *command) setup(ctx context.Context) error {
 
 	// Set up chaintime.
 	c.chainTime, err = standardchaintime.New(ctx,
-		standardchaintime.WithGenesisTimeProvider(c.consensusClient.(consensusclient.GenesisTimeProvider)),
+		standardchaintime.WithGenesisProvider(c.consensusClient.(consensusclient.GenesisProvider)),
 		standardchaintime.WithSpecProvider(c.consensusClient.(consensusclient.SpecProvider)),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create chaintime service")
 	}
 
-	specResponse, err := c.consensusClient.(consensusclient.SpecProvider).Spec(ctx)
+	specResponse, err := c.consensusClient.(consensusclient.SpecProvider).Spec(ctx, &api.SpecOpts{})
 	if err != nil {
 		return errors.Wrap(err, "failed to obtain spec")
 	}
